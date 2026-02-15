@@ -33,6 +33,9 @@ class GoogleCalendarService:
             return creds
         return None
 
+    def is_authenticated(self):
+        return self.creds is not None
+
     def get_auth_url(self):
         # Using InstalledAppFlow for simplicity, but for a real bot we'd need a web server for redirect_uri
         # Or we use the OOB flow if allowed (deprecated).

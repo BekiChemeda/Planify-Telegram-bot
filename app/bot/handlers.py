@@ -67,7 +67,22 @@ def authenticate(message):
     
     if auth_url:
         user_auth_flows[chat_id] = flow
-        msg = bot.send_message(chat_id, f"Please authenticate here:\n{auth_url}\n\nThen refer to the redirect page (localhost) or just paste the code here if provided.")
+        # Instruction message
+        msg_text = (
+            "🔐 **Authorization Required**\n\n"
+            "To connect your Google Calendar:\n"
+            "1. Tap the link below (or hold to copy).\n"
+            "2. Select 'Open in...' to open in your browser or Telegram's browser.\n"
+            "3. Sign in to your Google Account.\n"
+            "4. Copy the authorization code provided.\n"
+            "5. Paste the code here."
+        )
+        
+        # We can't use url argument for auth url easily if it's too long... 
+        # But we can try putting it in text.
+        formatted_msg = f"{msg_text}\n\n👇 **Auth Link** 👇\n`{auth_url}`"
+        
+        msg = bot.send_message(chat_id, formatted_msg, parse_mode="Markdown")
         bot.register_next_step_handler(msg, process_auth_code)
     else:
         bot.send_message(chat_id, "Could not generate auth URL.")
@@ -90,11 +105,27 @@ def process_auth_code(message):
     else:
         bot.send_message(chat_id, "Auth session expired. Please run /auth again.")
 
+def is_authorized(chat_id):
+    service = GoogleCalendarService(chat_id)
+    return service.is_authenticated()
+
+def require_auth(func):
+    def wrapper(message, *args, **kwargs):
+        if is_authorized(message.chat.id):
+            return func(message, *args, **kwargs)
+        else:
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("Authorize Google Calendar", callback_data="menu_auth"))
+            bot.send_message(message.chat.id, "⚠️ You are not authorized. Please connect your Google Calendar first.", reply_markup=markup)
+    return wrapper
+
 @bot.message_handler(func=lambda m: m.text == "Create Task")
+@require_auth
 def manual_create_start(message):
     bot.send_message(message.chat.id, "Please describe the task/event in natural language (e.g., 'Meeting with John tomorrow at 3pm').")
 
 @bot.message_handler(func=lambda m: m.text == "My Tasks")
+@require_auth
 def list_tasks(message):
     list_upcoming_events(message.chat.id)
 
@@ -118,12 +149,26 @@ def callback_query(call):
 
     if call.data.startswith("menu_"):
         action = call.data.split("_")[1]
+        
+        if action == "auth":
+             # Auth is the only one always allowed
+             authenticate(call.message)
+             bot.answer_callback_query(call.id)
+             return
+
+        # Check auth for others
+        service = GoogleCalendarService(chat_id)
+        if not service.is_authenticated():
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("Authorize Google Calendar", callback_data="menu_auth"))
+            bot.send_message(chat_id, "⚠️ You need to authorize first.", reply_markup=markup)
+            bot.answer_callback_query(call.id, "Auth required")
+            return
+
         if action == "create":
              bot.send_message(chat_id, "Please describe the task/event in natural language (e.g., 'Meeting with John tomorrow at 3pm').")
         elif action == "tasks":
              list_upcoming_events(chat_id)
-        elif action == "auth":
-             authenticate(call.message)
         elif action == "settings":
              bot.send_message(chat_id, "Settings feature coming soon!")
         
@@ -211,7 +256,14 @@ def process_natural_language(message, text_override=None):
     if message.text.startswith('/'): return
     
     chat_id = message.chat.id
+    if not is_authorized(chat_id):
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("Authorize Google Calendar", callback_data="menu_auth"))
+        bot.send_message(chat_id, "⚠️ Please identify yourself to Google Calendar before creating tasks.", reply_markup=markup)
+        return
+
     text = text_override or message.text
+
     
     msg = bot.send_message(chat_id, "Thinking... 🧠")
     
