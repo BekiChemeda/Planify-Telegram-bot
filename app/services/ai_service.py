@@ -32,8 +32,7 @@ class AIService:
         
         try:
             response = self.client.models.generate_content(
-                model="gemini-2.0-flash", # Fallback to 2.0-flash as 3 might not be widely available contextually, but user asked for it.
-                # If you have access, change to "gemini-3-flash-preview"
+                model="gemini-2.0-flash", 
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",

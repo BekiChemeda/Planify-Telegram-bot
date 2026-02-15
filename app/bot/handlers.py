@@ -12,9 +12,13 @@ ai_service = AIService()
 
 # --- Keyboards ---
 def get_main_menu():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(types.KeyboardButton("Create Task"), types.KeyboardButton("My Tasks"))
-    markup.add(types.KeyboardButton("Settings"), types.KeyboardButton("Auth"))
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("Create Task", callback_data="menu_create"),
+        types.InlineKeyboardButton("My Tasks", callback_data="menu_tasks"),
+        types.InlineKeyboardButton("Settings", callback_data="menu_settings"),
+        types.InlineKeyboardButton("Auth", callback_data="menu_auth")
+    )
     return markup
 
 def get_confirmation_keyboard():
@@ -111,6 +115,20 @@ def list_upcoming_events(chat_id):
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
     chat_id = call.message.chat.id
+
+    if call.data.startswith("menu_"):
+        action = call.data.split("_")[1]
+        if action == "create":
+             bot.send_message(chat_id, "Please describe the task/event in natural language (e.g., 'Meeting with John tomorrow at 3pm').")
+        elif action == "tasks":
+             list_upcoming_events(chat_id)
+        elif action == "auth":
+             authenticate(call.message)
+        elif action == "settings":
+             bot.send_message(chat_id, "Settings feature coming soon!")
+        
+        bot.answer_callback_query(call.id)
+        return
     
     if call.data == "confirm_event":
         event = temp_events.get(chat_id)
